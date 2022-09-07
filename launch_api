@@ -1,0 +1,438 @@
+#!/usr/bin/env python3
+# license removed for brevity
+import rospy
+import roslaunch
+from std_msgs.msg import *
+from state_arduino.msg import *
+from std_msgs.msg import String
+import sys
+import select
+import os
+import threading
+if os.name == 'nt':
+    import msvcrt
+    import time
+else:
+    import tty
+    import termios
+import paho.mqtt.client as mqtt
+host = "test.mosquitto.org"
+port = 8000
+
+
+
+
+class ARDUINO_IO:
+ 
+    def __init__(self):
+
+        # initialize
+        rospy.init_node('arduino_io', anonymous=True)
+        rospy.loginfo("[CONNECT TO ARDUINO] connect to arduino ......." )
+        rospy.loginfo("[PUBLISHER STATE] publisher state ........")
+        self.io_msg = state_io()
+        self.robot_fb = state_robot()
+        self.robot_current = "waiting"
+        self.uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+        roslaunch.configure_logging(self.uuid)
+        
+
+        # ROSLAUNCH API
+        # self.EMERGENCY = roslaunch.parent.ROSLaunchParent(uuid, ["/home/only/catkin_ws/src/turtlebot3/turtlebot3_bringup/launch/turtlebot3_remote.launch"])
+        
+        # self.DRIVES_TO_DESTINATION = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.PLANNING = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.STARTUP_SIGNAL = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.GENERAL_ERROR = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.MANUAL_DRIVE = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.MAPPING = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.ARCODE_DETECT = roslaunch.parent.ROSLaunchParent(uuid, ["/home/haier/catkin_ws/src/testapi/launch/test_node.launch"])
+        # self.WAITING_FOR_JOB = roslaunch.parent.ROSLaunchParent(uuid, ["/home/tuppy/agc_ws/src/agc/agc_bringup/launch/agc_bringup.launch"])
+        self.MISSION_1 = roslaunch.parent.ROSLaunchParent(self.uuid, ["/home/sorlab/catkin_ws/src/state_arduino/launch/mission1.launch"])
+        self.MISSION_2 = roslaunch.parent.ROSLaunchParent(self.uuid, ["/home/sorlab/catkin_ws/src/state_arduino/launch/mission2.launch"])
+        self.GOAL_1 = roslaunch.parent.ROSLaunchParent(self.uuid, ["/home/sorlab/catkin_ws/src/state_arduino/launch/goal1.launch"])
+        self.GOAL_2 = roslaunch.parent.ROSLaunchParent(self.uuid, ["/home/sorlab/catkin_ws/src/state_arduino/launch/goal2.launch"])
+        self.HOME = roslaunch.parent.ROSLaunchParent(self.uuid, ["/home/sorlab/catkin_ws/src/state_arduino/launch/home.launch"])
+
+        # INTERLOCK 
+        # self.emergency_in = False
+        # self.drives_to_destination_in = False
+        # self.planning_in = False
+        # self.startup_signal_in = False
+        # self.general_error_in = False
+        # self.manual_drive_in = False
+        # self.mapping_in = False
+        # self.arcode_detect_in = False
+        self.waiting_for_job_in = False
+        self.mission1_in = False
+        self.mission2_in = False
+        self.goal1_in = False
+        self.goal2_in = False
+        self.home_in = False
+
+        # STATE IO Session
+        self.buzzer = [False, False, False, False]
+        self.lift = "ORIGINAL"
+        self.limit_liftup = False
+        self.limit_liftdown = False
+        # self.sw_green = False
+        # self.sw_orange = False
+        # self.led_status = "ORIGINAL"
+        # self.ledbar = False
+        # self.lamp_green = False
+        # self.lamp_orange = False
+        # self.lamp_white  = False
+        
+        # STATE ROBOT Session
+        # self.emergency = False
+        # self.drives_to_destination = False
+        # self.planning = False
+        # self.startup_signal = False
+        # self.general_error = False
+        # self.manual_drive = False
+        # self.mapping = False
+        # self.arcode_detect = False
+        self.waiting_for_job = False
+        self.mission1 = False
+        self.mission2 = False
+        self.goal1 = False
+        self.goal2 = False
+        self.home = False
+
+        # ROS Publisher session
+        self.pub_io = rospy.Publisher("/io_state", state_io, queue_size=10)
+        self.pub_robot = rospy.Publisher("/robot_current_state", state_robot, queue_size=10)
+        # self.pub_currentState = rospy.Publisher("/current_robot_state", String, queue_size=10)
+        # ROS Subscriber session
+        # self.sub_swGreen = rospy.Subscriber("/SW_Green", Bool, self.swGreen_cb)
+        # self.sub_swOrange = rospy.Subscriber("/SW_Orange", Bool, self.swOrange_cb)
+        self.sub_State = rospy.Subscriber("/job_robot", String, self.state_cb)
+
+        # While loop
+        rate = rospy.Rate(100)
+ 
+        while not rospy.is_shutdown():
+            self.update_state()
+            rate.sleep()
+        rospy.loginfo("[DISCONNECT] disconnect ........")
+
+    def state_cb(self, data):
+        if data.data == "MISSION1" or data.data == "mission1":
+            self.waiting_for_job = False
+            self.mission1 = True
+            self.mission2 = False
+            self.goal1 = False
+            self.goal2 = False
+            self.home = False
+            self.waiting_for_job_in = True
+            self.mission1_in = False
+            self.mission2_in = True
+            self.goal1_in = True
+            self.goal2_in = True
+            self.home_in = True
+        elif data.data == "MISSION2" or data.data == "mission2":
+            self.waiting_for_job = False
+            self.mission1 = False
+            self.mission2 = True
+            self.goal1 = False
+            self.goal2 = False
+            self.home = False
+            self.waiting_for_job_in = True
+            self.mission1_in = True
+            self.mission2_in = False
+            self.goal1_in = True
+            self.goal2_in = True
+            self.home_in = True
+        elif data.data == "GOAL1" or data.data == "goal1":
+            self.waiting_for_job = False
+            self.mission1 = False
+            self.mission2 = False
+            self.goal1 = True
+            self.goal2 = False
+            self.home = False
+            self.waiting_for_job_in = True
+            self.mission1_in = True
+            self.mission2_in = True
+            self.goal1_in = False
+            self.goal2_in = True
+            self.home_in = True
+        elif data.data == "GOAL2" or data.data == "goal2":
+            self.waiting_for_job = False
+            self.mission1 = False
+            self.mission2 = False
+            self.goal1 = False
+            self.goal2 = True
+            self.home = False
+            self.waiting_for_job_in = True
+            self.mission1_in = True
+            self.mission2_in = True
+            self.goal1_in = True
+            self.goal2_in = False
+            self.home_in = True
+        elif data.data == "WAITING" or data.data == "waiting":
+            self.waiting_for_job = True
+            self.mission1 = False
+            self.mission2 = False
+            self.goal1 = False
+            self.goal2 = False
+            self.home = False
+            self.waiting_for_job_in = False
+            self.mission1_in = True
+            self.mission2_in = True
+            self.goal1_in = True
+            self.goal2_in = True
+            self.home_in = True
+        elif data.data == "HOME" or data.data == "home":
+            self.waiting_for_job = False
+            self.mission1 = False
+            self.mission2 = False
+            self.goal1 = False
+            self.goal2 = False
+            self.home = True
+            self.waiting_for_job_in = True
+            self.mission1_in = True
+            self.mission2_in = True
+            self.goal1_in = True
+            self.goal2_in = True
+            self.home_in = False
+
+    def swGreen_cb(self, data):
+        if data.data == True:
+            # rospy.loginfo("True")
+            self.sw_green = True
+            self.lamp_green = True
+            self.waiting_for_job = True
+
+        elif data.data == False:
+            # rospy.loginfo("False")
+            self.sw_green = False
+            self.lamp_green = False
+            self.waiting_for_job = False
+
+    def swOrange_cb(self, data):
+        if data.data == True:
+            self.sw_orange = True
+            self.lamp_orange = True
+        elif data.data == False:
+            self.sw_orange = False
+            self.lamp_orange = False
+
+    def launch_files(self):
+
+        # roslaunch waiting
+        while self.waiting_for_job == True and self.waiting_for_job_in == False:
+            self.waiting_for_job_in = True
+            # self.WAITING_FOR_JOB.start()
+            rospy.loginfo("[RUN SCRIPT SUCCESS]")
+            rospy.sleep(3)
+            break
+        while self.waiting_for_job == False and self.waiting_for_job_in == True:
+            self.waiting_for_job_in = False
+            # self.WAITING_FOR_JOB.shutdown()
+            rospy.loginfo("[SCRIPT SHUTDOWN]")
+            rospy.sleep(3)
+            break
+
+        # roslaunch mission1
+        while self.mission1 == True and self.mission1_in == False:
+            self.mission1_in = True
+            self.robot_fb.MISSION1 = True
+            self.waiting_for_job = False
+            self.MISSION_1.start()
+            rospy.loginfo("[SCRIPT MISSION1 SUCCESS]")
+            rospy.sleep(3)
+            break
+        while self.mission1 == False and self.mission1_in == True:
+            self.mission1_in = False
+            self.robot_fb.MISSION1 = False
+            self.waiting_for_job = True
+            self.MISSION_1.shutdown()
+            rospy.loginfo("[SCRIPT MISSION1 SHUTDOWN]")
+            rospy.sleep(3)
+            break
+
+        # roslaunch mission2
+        while self.mission2 == True and self.mission2_in == False:
+            self.mission2_in = True
+            self.robot_fb.MISSION2 = True
+            self.waiting_for_job = False
+            self.MISSION_2.start()
+            rospy.loginfo("[SCRIPT MISSION2 SUCCESS]")
+            rospy.sleep(3)
+            break
+        while self.mission2 == False and self.mission2_in == True:
+            self.mission2_in = False
+            self.robot_fb.MISSION2 = False
+            self.waiting_for_job = True
+            self.MISSION_2.shutdown()
+            rospy.loginfo("[SCRIPT MISSION2 SHUTDOWN]")
+            rospy.sleep(3)
+            break
+
+        # roslaunch goal1
+        while self.goal1 == True and self.goal1_in == False:
+            self.goal1_in = True
+            self.robot_fb.GOAL1 = True
+            self.waiting_for_job = False
+            self.GOAL_1.start()
+            rospy.loginfo("[SCRIPT GOAL1 SUCCESS]")
+            rospy.sleep(3)
+            break
+        while self.goal1 == False and self.goal1_in == True:
+            self.goal1_in = False
+            self.robot_fb.GOAL1 = False
+            self.waiting_for_job = True
+            self.GOAL_1.shutdown()
+            rospy.loginfo("[SCRIPT GOAL1 SHUTDOWN]")
+            rospy.sleep(3)
+            break
+
+        # roslaunch goal2
+        while self.goal2 == True and self.goal2_in == False:
+            self.goal2_in = True
+            self.robot_fb.GOAL2 = True
+            self.waiting_for_job = False
+            self.GOAL_2.start()
+            rospy.loginfo("[SCRIPT GOAL2 SUCCESS]")
+            rospy.sleep(3)
+            break
+        while self.goal2 == False and self.goal2_in == True:
+            self.goal2_in = False
+            self.robot_fb.GOAL2 = False
+            self.waiting_for_job = True
+            self.GOAL_2.shutdown()
+            rospy.loginfo("[SCRIPT GOAL2 SHUTDOWN]")
+            rospy.sleep(3)
+            break
+
+        # roslaunch home
+        while self.home == True and self.home_in == False:
+            self.home_in = True
+            self.robot_fb.HOME = True
+            self.waiting_for_job = False
+            self.HOME.start()
+            rospy.loginfo("[SCRIPT HOME SUCCESS]")
+            rospy.sleep(3)
+            break
+        while self.home == False and self.home_in == True:
+            self.home_in = False
+            self.robot_fb.HOME = False
+            self.waiting_for_job = True
+            self.HOME.shutdown()
+            rospy.loginfo("[SCRIPT HOME SHUTDOWN]")
+            rospy.sleep(3)
+            break
+
+        # roslaunch teleop
+        # while self.manual_drive == True and self.manual_drive_in == False:
+        #     self.manual_drive_in = True
+        #     self.robot_fb = "MANUAL_DRIVE_JOYSTICK"
+        #     self.MANUAL_DRIVE.start()
+        #     rospy.loginfo("[MANUAL_DRIVE SUCCESS]")
+        #     rospy.sleep(3)
+        #     break
+        # while self.manual_drive == False and self.manual_drive_in == True:
+        #     self.manual_drive_in = False
+        #     self.robot_fb = "waiting_FOR_JOB"
+        #     self.MANUAL_DRIVE.shutdown()
+        #     rospy.loginfo("[MANUAL_DRIVE SHUTDOWN]")
+        #     rospy.sleep(3)
+        #     break
+
+        # roslaunch aruco_detect
+        # while self.arcode_detect == True and self.arcode_detect_in == False:
+        #     self.arcode_detect_in = True
+        #     self.robot_fb = "ARCODE_DETECT"
+        #     self.ARCODE_DETECT.start()
+        #     rospy.loginfo("[RUN ARCODE_DETECT SUCCESS]")
+        #     rospy.sleep(3)
+        #     break
+        # while self.arcode_detect == False and self.arcode_detect_in == True:
+        #     self.arcode_detect_in = False
+        #     self.robot_fb = "waiting_FOR_JOB"
+        #     self.ARCODE_DETECT.shutdown()
+        #     rospy.loginfo("[ARCODE_DETECT SHUTDOWN]")
+        #     rospy.sleep(3)
+        #     break
+
+        # # stop all file launch
+        # while self.emergency == True and self.emergency_in == False:
+        #     self.emergency_in = True
+        #     self.robot_fb = "EMERGENCY"
+        #     self.MAPPING.shutdown()
+        #     rospy.sleep(1)
+        #     self.WAITING_FOR_JOB.shutdown()
+        #     rospy.sleep(1)
+        #     self.ARCODE_DETECT.shutdown()
+        #     rospy.sleep(1)
+        #     self.MANUAL_DRIVE.shutdown()
+        #     rospy.sleep(1)
+        #     rospy.loginfo("[SHUTDOWN HOLE LAUNCH]")
+        #     break
+        # while self.emergency == False and self.emergency_in == True:
+        #     self.emergency_in = False
+        #     self.robot_fb = "STARTUP_SIGNAL"
+        #     rospy.loginfo("[READY TO BRINGUP]")
+        #     rospy.sleep(1)
+        #     break
+
+    def update_state(self):
+        # STATE IO Session
+        self.io_msg.BUZZER = self.buzzer
+        self.io_msg.LIFT = self.lift
+        self.io_msg.LIMIT_LIFTUP = self.limit_liftup
+        self.io_msg.LIMIT_LIFTDOWN = self.limit_liftdown
+        # self.io_msg.SW_GREEN = self.sw_green
+        # self.io_msg.SW_ORANGE = self.sw_orange
+        # self.io_msg.LED_STATUS = self.led_status
+        # self.io_msg.LEDBAR = self.ledbar
+        # self.io_msg.LAMP_GREEN = self.lamp_green
+        # self.io_msg.LAMP_ORANGE = self.lamp_orange
+        # self.io_msg.LAMP_WHITE  = self.lamp_white
+        self.robot_fb.WAITING = self.waiting_for_job
+        self.robot_fb.MISSION1 = self.mission1
+        self.robot_fb.MISSION2 = self.mission2
+        self.robot_fb.GOAL1 = self.goal1
+        self.robot_fb.GOAL2 = self.goal2
+        self.robot_fb.HOME = self.home
+        
+        # # STATE ROBOT Session
+        # self.state_msg.EMERGENCY = self.emergency
+        # self.state_msg.WAITING_FOR_JOB = self.waiting_for_job
+        # self.state_msg.DRIVES_TO_DESTINATION = self.drives_to_destination
+        # self.state_msg.PLANNING = self.planning
+        # self.state_msg.STARTUP_SIGNAL = self.startup_signalr
+        # self.state_msg.GENERAL_ERROR = self.general_error
+        # self.state_msg.MANUAL_DRIVE = self.manual_drive
+        # self.state_msg.MAPPING = self.mapping
+        # self.state_msg.ARCODE_DETECT = self.arcode_detect
+
+        # rospy.loginfo(self.io_msg)
+        self.pub_io.publish(self.io_msg)
+        self.pub_robot.publish(self.robot_fb)
+        self.launch_files()
+def on_connect(self, client, userdata, rc):
+    print("MQTT Connected.")
+    self.subscribe("TEST/MQTT")
+
+
+def on_message(client, userdata, msg):
+    global key
+    key = msg.payload.decode("utf-8")
+    print(key)
+    if key.split('-')[0].lower() == 'mode':
+        ARDUINO_IO.state_cb(key.split('-')[2].lower())
+
+if __name__ == '__main__':
+    try:
+        client = mqtt.Client()
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.connect(host)
+        client.loop_forever()
+        client.loop_start()
+        rospy.loginfo("Publishing data from arduino..")
+        ARDUINO_IO()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass

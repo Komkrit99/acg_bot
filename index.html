@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <link href="./css/styles.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js" integrity="sha512-n8IpKWzDnBOcBhRlHirMZOUvEq2bLRMuJGjuVqbzUJwtTsgwOgK5aS0c1JA647XWYfqvXve8k3PtZdzpipFjgg==" crossorigin="anonymous"></script>
+    <script src="https://cdn.rawgit.com/mrdoob/three.js/master/examples/js/loaders/GLTFLoader.js"></script>
+    <title>Hello World!</title>
+  </head>
+  <body>
+
+    <div class="loading">
+      <div class="image-loading image-animation" id="loading">
+
+      </div>
+    </div>
+    <div class="main-process">
+      <div class="nav">
+        <div class="body-nav">
+          <div class="logo-nav">
+            <img src="../image/logo.png">
+          </div>
+          <div class="item-nav">
+            <div>
+              <a>ควบคุม</a>
+            </div>
+            <div>
+              ตำแหน่ง
+            </div>
+            <div>
+              เกี่ยวกับ
+            </div>
+          </div>
+        </div>
+        <div class="end-nav">
+          <div class="home-btn" onclick="sendMessage('TEST/MQTT','mode-gohome')">
+            <i class="fa fa-home"></i>
+          </div>
+        </div>
+      </div>
+      <div class="container-main">
+        <div class="menu-left">
+          
+          <div class="header-title-menu">
+            <p>โหมดการใช้งาน</p>
+          </div>
+          <center>
+            <div class="mode">
+              <div class="active" onclick="sendMessage('TEST/MQTT','move-st')">
+                <i class="fa fa-gamepad"></i> ควบคุม
+              </div>
+              <div id="foll_btn" onclick="sendMessage('TEST/MQTT','mode-follow')">
+                ติดตามบุคคล
+              </div>
+            </div>
+          </center>
+          <center>
+            <div class="joystick">
+              <div id="w_btn" onclick="sendMessage('TEST/MQTT','move-w')" class="top">
+                w
+              </div>
+  
+              <div id="a_btn" onclick="sendMessage('TEST/MQTT','move-a')" class="left">
+                a
+              </div>
+  
+              <div id="s_btn" onclick="sendMessage('TEST/MQTT','move-s')" class="stop">
+                s
+              </div>
+  
+              <div id="d_btn" onclick="sendMessage('TEST/MQTT','move-d')" class="right">
+                d
+              </div>
+  
+              <div id="x_btn" onclick="sendMessage('TEST/MQTT','move-x')" class="bottom">
+                x
+              </div>
+            </div>
+          </center>
+          <hr>
+          <div class="header-title-menu">
+            <p>ภารกิจ</p>
+          </div>
+          <center>
+            <div class="item-list">
+              <div  id="mis_btn" onclick="sendMessage('TEST/MQTT','goto-0.5-0.0-0.0')" class="item-action">
+                navigation
+              </div>
+              <div  id="map_btn" onclick="sendMessage('TEST/MQTT','quest-home')" class="item-action">
+                Cart-Point
+              </div>
+              <div id="ware1_btn" onclick="sendMessage('TEST/MQTT','quest-goal1')" class="item-action">
+                location A
+              </div>
+              <div id="ware2_btn" onclick="sendMessage('TEST/MQTT','quest-goal2')" class="item-action">
+                location B
+              </div>
+              <div id="item1_btn" onclick="sendMessage('TEST/MQTT','quest-mission1')" class="item-action">
+                pick-up
+              </div>
+              <div id="item2_btn" onclick="sendMessage('TEST/MQTT','quest-mission2')" class="item-action">
+                release
+              </div>
+            </div>
+          </center>
+        </div>
+        <div class="main-right">
+          
+        </div>
+      </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js" type="text/javascript"></script>
+    <script src="../js/index.js"></script>
+        
+  </body>
+</html>
